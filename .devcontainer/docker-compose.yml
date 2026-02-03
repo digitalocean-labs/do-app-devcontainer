@@ -1,11 +1,12 @@
-name: my-project  # IMPORTANT: Change this to your project name for multi-workspace support
+# Compose project name defaults to the folder; set COMPOSE_PROJECT_NAME in a .env file to override.
 services:
   app:
     image: mcr.microsoft.com/devcontainers/base:noble
     profiles: [ "app" ]
     volumes:
       - ..:/workspaces/app:cached
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount git common dir (.bare for worktrees) at same path for git to work
+      - ${GIT_COMMON_DIR}:${GIT_COMMON_DIR}:cached
       # Add these for credential persistence
       - app-config:/home/vscode/.config      # All .config tools (gh, doctl, etc.)
       - claude-config:/home/vscode/.claude
@@ -124,23 +125,23 @@ services:
       retries: 5
       start_period: 60s
 
+  # RustFS - S3-compatible object storage (drop-in MinIO replacement)
+  # Note: Profile name "minio" kept for backward compatibility
+  # See: https://github.com/rustfs/rustfs
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: rustfs/rustfs:latest
     profiles: [ "minio" ]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:0:9000"
-      - "127.0.0.1:0:9001"
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      - "127.0.0.1:0:9000"  # API (S3-compatible)
+      - "127.0.0.1:0:9001"  # Console
     volumes:
       - minio-data:/data
+      - minio-logs:/logs
     networks:
       - devcontainer-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health"]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -196,6 +197,7 @@ volumes:
   valkey-data:
   kafka-data:
   minio-data:
+  minio-logs:
   opensearch-data:
   app-config:
   claude-config:
